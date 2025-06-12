@@ -1,0 +1,136 @@
+:root {
+	--color-bg: #2B2B2B;
+	--color-text: #16DE73;
+	--color-input-bg: #3f3f3f;
+	--color-input-border: #6b6b6b;
+	--color-button-bg: #333;
+	--color-button-hover: #444;
+	--color-button-border: #555;
+	--color-result-bg: #6de792;
+	--color-result-border: #16de73;
+	--color-result-text: #000000;
+	--color-error-bg: #331a1a;
+	--color-error-border: #cc6666;
+	--color-error-text: #ff9999;
+	--color-link: #003049;
+	--color-copy-button-bg: #2f3a35;
+	--color-copy-button-border: #4a6359;
+	--color-copy-button-hover-bg: #3b4942;
+}
+
+html {
+	font-size: 100%;
+}
+
+body {
+	font-family: Arial, sans-serif;
+	background-color: var(--color-bg);
+	color: var(--color-text);
+	margin: 0 auto;
+	width: 90%;
+	max-width: 900px;
+	padding: 0 1rem;
+}
+input[type="text"] {
+	all: unset;
+	width: 100%;
+	padding: 0.75rem;
+	margin: 0.75rem 0;
+	box-sizing: border-box;
+	background-color: var(--color-input-bg) !important;
+	color: var(--color-text) !important;
+	-webkit-text-fill-color: var(--color-text) !important;
+	caret-color: var(--color-text);
+	border: 1px solid var(--color-input-border);
+	border-radius: 4px;
+	font-size: 1rem;
+	appearance: none;
+	-webkiit-appearance: none;
+	unicode-bidi: plaintext;
+}
+
+button {
+	padding: 0.75rem 1.5rem;
+	cursor: pointer;
+	background-color: var(--color-button-bg);
+	color: var(--color-text);
+	border: 1px solid var(--color-button-border);
+	border-radius: 4px;
+	font-size: 1rem;
+}
+
+button:hover {
+	background-color: var(--color-button-hover);
+}
+
+#copy-button {
+	padding: 0.3rem 0.7rem;
+	font-size: 0.7rem;
+	border-radius: 3px;
+	margin-left: 0.5rem;
+	background-color: var(--color-copy-button-bg);
+	border: 2px solid var(--color-copy-button-border);
+	vertical-align: middle;
+	cursor: pointer;
+}
+
+#copy-button:hover:enabled {
+	background-color: var(--color-copy-button-hover-bg);
+}
+
+#result, #error {
+	margin-top: 1.25rem;
+	padding: 1rem;
+	border-radius: 6px;
+	word-wrap: break-word;
+}
+
+#result {
+	background-color: var(--color-result-bg);
+	border: 1px solid var(--color-result-border);
+	color: var(--color-result-text);
+}
+
+#error {
+	background-color: var(--color-error-bg);
+	border: 1px solid var(--color-error-border);
+	color: var(--color-error-text);
+}
+
+a {
+	color: var(--color-link);
+	text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+	html {
+		font-size: 90%;
+	}
+
+	button {
+		width: 100%;
+		margin-top: 10px;
+	}
+}
+
+@media (min-width: 1200px) {
+	html {
+		font-size: 110%;
+	}
+}
+
+/* chrome/edge/safari autofill override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+	-webkit-box-shadow: 0 0 0px 1000px var(--color-input-bg) inset !important;
+	-webkit-text-fill-color: var(--color-text) !important;
+	transition: background-color 9999s ease-out;
+	/* transition: background-color 5000s ease-in-out 0s; /1* prevent flicker *1/ */
+}
+
+input:-moz-autofill {
+  box-shadow: 0 0 0px 1000px var(--color-input-bg) inset !important;
+  -moz-text-fill-color: var(--color-text) !important;
+}

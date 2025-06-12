@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<title>gmaps2osm</title>
+		<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	</head>
+	<body>
+		<h2>Convert Google Maps Link to OSM Link</h2>
+		<form id="convert-form" aria-labelledby="form-label" method="post">
+			<label for="gmaps_url" id="form-label">Google Maps Link:</label>
+			<input type="text" id="gmaps_url" name="gmaps_url" required aria-required="true" aria-describedby="form-description">
+			<p id="form-description">Paste a Google Maps URL to convert it to an OpenStreeMap URL.</p>
+			<button type="submit" aria-label="Convert link to coordinates and OpenStreetMap URL">Convert</button>
+		</form>
+
+		{% if latitude and longitude %}
+		<div id="result" role="region" aria-live="polite">
+			<p><strong>Coordinates:</strong> <span id="coords">
+				{{ latitude }}, {{longitude}}
+			</span></p>
+			<p><strong>OSM Link:</strong>
+			<a id="osm_link" href="{{osm_link}}" target="_blank">{{osm_link}}</a>
+			<button id="copy-button" type="button" aria-label="Copy OSM link to clipboard">📋</button>
+			</p>
+		</div>
+		{% elif error %}
+		<div id="error" role="alert" aria-live="assertive">
+			{{ error }}
+		</div>
+		{% endif %}
+		<section id="osmand-opening-supported-links" role="region" tabindex="0">
+			<h3 id="osmand-opening-heading">
+				If you have not done so already or clicking the generated link doesn't open your OsmAnd app, you need to tell your OsmAnd application to open osmand.net links by default.
+			</h3>
+			<ul>
+				<li>Open the settings for OsmAnd on your device (App Info).</li>
+				<li>Go to <strong>Open by default</strong>.</li>
+				<li>Click on <strong>+ Add link</strong>.</li>
+				<li>Look for osmand.net and check it.</li>
+				<li>Click on <strong>Add</strong></li>
+			</ul>
+		</section>
+
+		<script>
+			document.getElementById('copy-button').addEventListener('click', function () {
+				const button = this;
+				const link = document.getElementById('osm_link');
+				const url = link?.href;
+				if (!url) return;
+				navigator.clipboard.writeText(url)
+					.then(() => {
+						button.textContent = '✅';
+						button.disabled = true;
+					})
+					.catch(err => {
+						console.error('Copy failed:', err);
+						alert('Failed to copy to clipboard.');
+					});
+			});
+		</script>
+	</body>
+</html>
