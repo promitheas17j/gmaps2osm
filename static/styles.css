@@ -64,7 +64,8 @@ button:hover {
 }
 
 #copy-button {
-	padding: 0.3rem 0.7rem;
+	max-width: 40px;
+	padding: 0.3rem 0;
 	font-size: 0.7rem;
 	border-radius: 3px;
 	margin-left: 0.5rem;
