@@ -44,7 +44,6 @@ def extract_coordinates_for_place_name(url: str):
 	For gmaps links which do not result in a link containing coordinates, use selenium to visit the link in a headless browser, wait a few seconds for the url to update with coordinates, and grab that link.
 	"""
 	options = Options()
-	# options.headless = True
 	options.page_load_strategy = "eager"
 	options.add_argument("--headless=new")
 	options.add_argument("--no-sandbox")
@@ -59,6 +58,7 @@ def extract_coordinates_for_place_name(url: str):
 	options.add_argument("--no-first-run")
 	# options.add_argument("--safebrowsing-disable-auto-update")
 	options.add_argument("--disable-features=VizDisplayCompositor")
+	options.add_argument("--remote-debugging-port=9222")
 	prefs = {
 		"profile.managed_default_content_settings.images": 2,  # Disable images
 		"profile.default_content_setting_values.notifications": 2,
