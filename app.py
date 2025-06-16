@@ -42,22 +42,54 @@ def extract_coordinates_for_place_name(url: str):
 	For gmaps links which do not result in a link containing coordinates, use selenium to visit the link in a headless browser, wait a few seconds for the url to update with coordinates, and grab that link.
 	"""
 	options = Options()
-	options.headless = True
-	# options = ChromeOptions()
-	# options.add_argument("--headless=new")
+	# options.headless = True
+	options.page_load_strategy = "eager"
 	options.add_argument("--headless=new")
 	options.add_argument("--no-sandbox")
 	options.add_argument("--disable-dev-shm-usage")
+	options.add_argument("--disable-gpu")
+	options.add_argument("--disable-extensions")
+	# options.add_argument("--disable-background-networking")
+	# options.add_argument("--disable-sync")
+	options.add_argument("--disable-translate")
+	options.add_argument("--metrics-recording-only")
+	options.add_argument("--mute-audio")
+	options.add_argument("--no-first-run")
+	# options.add_argument("--safebrowsing-disable-auto-update")
+	options.add_argument("--disable-features=VizDisplayCompositor")
+	prefs = {
+		"profile.managed_default_content_settings.images": 2,  # Disable images
+		"profile.default_content_setting_values.notifications": 2,
+		"profile.default_content_setting_values.geolocation": 2
+	}
+	options.add_experimental_option("prefs", prefs)
 	driver = webdriver.Chrome(options=options)
 	wait = WebDriverWait(driver, 10)
 	try:
 		print(f"[DEBUG] Visiting: {url}")
 		driver.get(url)
-		time.sleep(5) # Wait for page to load - 5 seconds should be enough but increase if not
-		consent_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Reject all')]")))
-		consent_button.click()
-		print("[DEBUG] Clicked on consent button.")
-		time.sleep(3)
+		# time.sleep(5) # Wait for page to load - 5 seconds should be enough but increase if not
+		# consent_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Reject all')]")))
+		WebDriverWait(driver, 10).until(
+			lambda d: (
+				re.search(r"/(@|place/)[-.\d]+,[-.\d]+", d.current_url) or
+				"Reject all" in d.page_source
+			)
+		)
+		try:
+			consent_button = WebDriverWait(driver, 3).until(
+				EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Reject all')]")))
+			consent_button.click()
+			print("[DEBUG] Clicked on 'Reject all' button.")
+		except:
+			print("[DEBUG] No consent popup detected.")
+		WebDriverWait(driver, 10).until(
+				lambda d: re.search(r"/(@|place/)[-.\d]+,[-.\d]+", d.current_url)
+			)
+		print("[DEBUG] Coordinates detected in URL.")
+		# consent_button.click()
+		# print("[DEBUG] Clicked on consent button.")
+		# time.sleep(3)
 		final_url = driver.current_url
 		print(f"[DEBUG] Final URL: {final_url}")
 		patterns = [
