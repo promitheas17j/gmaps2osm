@@ -10,6 +10,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 import time
 from werkzeug.wrappers import response
+import tempfile
+import shutil
 
 app = Flask(__name__)
 
@@ -63,6 +65,8 @@ def extract_coordinates_for_place_name(url: str):
 		"profile.default_content_setting_values.geolocation": 2
 	}
 	options.add_experimental_option("prefs", prefs)
+	temp_dir = tempfile.mkdtemp()
+	options.add_argument(f"--user-data-dir={temp_dir}")
 	driver = webdriver.Chrome(options=options)
 	wait = WebDriverWait(driver, 10)
 	try:
@@ -105,6 +109,7 @@ def extract_coordinates_for_place_name(url: str):
 		return None, final_url
 	finally:
 		driver.quit()
+		shutil.rmtree(temp_dir)
 
 def extract_coordinates(url: str):
 	"""
