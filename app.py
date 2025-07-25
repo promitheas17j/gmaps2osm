@@ -1,18 +1,23 @@
 from typing import final
 from flask import Flask, request, render_template, jsonify
+from datetime import datetime
 import re
-import requests
 import urllib.parse
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-import time
-from werkzeug.wrappers import response
-import tempfile
-import shutil
+import requests
+from playwright.sync_api import sync_playwright
 
+# Test urls for regex:
+# https://www.google.com/maps/place/Eiffel+Tower/@48.8584,2.2945,17z
+# https://google.com/maps/place/Statue+of+Liberty/@40.6892,-74.0445,17z
+# https://maps.google.com/maps?q=Big+Ben,+London # has an issue, doesnt work
+# https://goo.gl/maps/XkC3bN3EoVhM8P4j7 # has an issue, doesnt work
+# https://maps.app.goo.gl/4jnZLELvmpvBmFvx8
+# https://maps.app.goo.gl/jXqDkM2NWN55kZcd9?g_st=com.google.maps.preview.copy
+# https://www.google.co.uk/maps/place/Buckingham+Palace/@51.5014,-0.1419,17z
+# https://www.google.de/maps/place/Brandenburger+Tor/@52.5163,13.3777,17z
+
+debug_enabled = True
+log_file_path = "/home/mart/Projects/gmaps2osm/"
 app = Flask(__name__)
 
 GMAPS_URL_RE = re.compile(
@@ -20,154 +25,128 @@ GMAPS_URL_RE = re.compile(
 	^https?://
 	(
 		(www\.)?
-		(google\.[a-z.]+/maps)			  |  # www.google.com/maps, google.co.uk/maps, etc.
-		(maps\.google\.[a-z.]+)			  |  # maps.google.com
-		(goo\.gl/maps)					  |  # goo.gl/maps
-		(maps\.app\.goo\.gl)				 # maps.app.goo.gl
+		(google\.[a-z.]+/maps)			  |		# www.google.com/maps, google.co.uk/maps, etc.
+		(maps\.google\.[a-z.]+)			  |		# maps.google.com
+		(goo\.gl/maps)					  |		# goo.gl/maps
+		(maps\.app\.goo\.gl)					# maps.app.goo.gl
+		# (maps\.app\.goo\.gl.*\.preview\.copy)	# maps.app.goo.gl(...).preview.copy
 	)
 	""",
 	re.IGNORECASE
 )
-# Test urls for regex:
-# https://www.google.com/maps/place/Eiffel+Tower/@48.8584,2.2945,17z
-# https://google.com/maps/place/Statue+of+Liberty/@40.6892,-74.0445,17z
-# https://maps.google.com/maps?q=Big+Ben,+London
-# https://goo.gl/maps/XkC3bN3EoVhM8P4j7
-# https://maps.app.goo.gl/4jnZLELvmpvBmFvx8
-# https://maps.app.goo.gl/jXqDkM2NWN55kZcd9?g_st=com.google.maps.preview.copy
-# https://www.google.co.uk/maps/place/Buckingham+Palace/@51.5014,-0.1419,17z
-# https://www.google.de/maps/place/Brandenburger+Tor/@52.5163,13.3777,17z
 
-
-def extract_coordinates_for_place_name(url: str):
-	"""
-	For gmaps links which do not result in a link containing coordinates, use selenium to visit the link in a headless browser, wait a few seconds for the url to update with coordinates, and grab that link.
-	"""
-	options = Options()
-	options.page_load_strategy = "eager"
-	options.add_argument("--headless=new")
-	options.add_argument("--no-sandbox")
-	options.add_argument("--disable-dev-shm-usage")
-	options.add_argument("--disable-gpu")
-	options.add_argument("--disable-extensions")
-	# options.add_argument("--disable-background-networking")
-	# options.add_argument("--disable-sync")
-	options.add_argument("--disable-translate")
-	options.add_argument("--metrics-recording-only")
-	options.add_argument("--mute-audio")
-	options.add_argument("--no-first-run")
-	# options.add_argument("--safebrowsing-disable-auto-update")
-	options.add_argument("--disable-features=VizDisplayCompositor")
-	options.add_argument("--remote-debugging-port=9222")
-	prefs = {
-		"profile.managed_default_content_settings.images": 2,  # Disable images
-		"profile.default_content_setting_values.notifications": 2,
-		"profile.default_content_setting_values.geolocation": 2
-	}
-	options.add_experimental_option("prefs", prefs)
-	temp_dir = tempfile.mkdtemp()
-	options.add_argument(f"--user-data-dir={temp_dir}")
-	driver = webdriver.Chrome(options=options)
-	wait = WebDriverWait(driver, 10)
-	try:
-		print(f"[DEBUG] Visiting: {url}")
-		driver.get(url)
-		# time.sleep(5) # Wait for page to load - 5 seconds should be enough but increase if not
-		# consent_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Reject all')]")))
-		WebDriverWait(driver, 10).until(
-			lambda d: (
-				re.search(r"/(@|place/)[-.\d]+,[-.\d]+", d.current_url) or
-				"Reject all" in d.page_source
-			)
-		)
-		try:
-			consent_button = WebDriverWait(driver, 3).until(
-				EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Reject all')]")))
-			consent_button.click()
-			print("[DEBUG] Clicked on 'Reject all' button.")
-		except:
-			print("[DEBUG] No consent popup detected.")
-		WebDriverWait(driver, 10).until(
-				lambda d: re.search(r"/(@|place/)[-.\d]+,[-.\d]+", d.current_url)
-			)
-		print("[DEBUG] Coordinates detected in URL.")
-		# consent_button.click()
-		# print("[DEBUG] Clicked on consent button.")
-		# time.sleep(3)
-		final_url = driver.current_url
-		print(f"[DEBUG] Final URL: {final_url}")
-		patterns = [
-			r'/@([-.\d]+),([-.\d]+)',  # /@lat,lon
-			r'/place/([-.\d]+),([-.\d]+)',	# /place/lat,lon
-			r'q=([-.\d]+),([-.\d]+)'  # ?q=lat,lon
-		]
-		for pattern in patterns:
-			match = re.search(pattern, final_url)
-			if match:
-				print(f"[DEBUG] final_url 2: {final_url}")
-				return match.groups(), final_url
-		return None, final_url
-	finally:
-		driver.quit()
-		shutil.rmtree(temp_dir)
-
+# ---- Dispatcher
 def extract_coordinates(url: str):
-	"""
-	Attempt to extract the coordinates from a google maps URL taking into consideration several of the formats.
-	"""
+	if ".preview.copy" in url:
+		return handle_preview_copy_url(url)
+	else:
+		return handle_standard_url(url)
+
+# ---- Handler: preview.copy links
+def handle_preview_copy_url(url: str):
+	url = url.split('?')[0]
+	input_url = resolve_initial_redirect(url)
+	if "consent.google.com" in input_url:
+		parsed = urllib.parse.urlparse(input_url)
+		query = urllib.parse.parse_qs(parsed.query)
+		continue_url = query.get("continue", [""])[0]
+		if continue_url:
+			input_url = urllib.parse.unquote(continue_url)
+		else:
+			log_msg("ERROR", "No 'continue' parameter found.")
+			return None, input_url
+	final_url = extract_with_playwright(input_url)
+	coord = extract_coords_from_url(final_url)
+	return coord, final_url
+
+# ---- Handler: standard links
+def handle_standard_url(url: str):
 	try:
-		print(f"[DEBUG] Original URL: {url}")
-		# Follow redirects
-		response =requests.get(url, allow_redirects=True)
-		print(f"[DEBUG] Final resolved URL: {response.url}")
-		print(f"[DEBUG] Redirect history:")
-		for i, r in enumerate(response.history):
-			print(f"  [{i}] {r.status_code} -> {r.url}")
+		# Follow redirect to get final destination
+		response = requests.head(url, allow_redirects=True, timeout=10)
 		final_url = response.url
-		print(f"[DEBUG] Final URL: {final_url}")
-		# Handle google consent redirect
-		if "consent.google.com" in final_url:
-			parsed = urllib.parse.urlparse(final_url)
-			query = urllib.parse.parse_qs(parsed.query)
-			continue_url = query.get("continue", [""])[0]
-			final_url = urllib.parse.unquote(continue_url)
-			print(f"[DEBUG] Final URL after consent redirect: {final_url}")
-		patterns = [
-			r'/@([-.\d]+),([-.\d]+)',
-			r'/search/([-.\d]+),\+?([-.\d]+)',
-			r'[?&]q=([-.\d]+),([-.\d]+)',
-			r'[?&]ll=([-.\d]+),([-.\d]+)',
-			r'[?&]center=([-.\d]+),([-.\d]+)',
-			r'!3d([-.\d]+)!4d([-.\d]+)'
-		]
-		for pattern in patterns:
-			match = re.search(pattern, final_url)
-			if match:
-				print(f"[DEBUG] Match found with pattern '{pattern}': {match.groups()}")
-				print(f"[DEBUG] final_url 1 {final_url}")
-				return match.groups(), final_url
-		return extract_coordinates_for_place_name(final_url)
-		# return None, final_url
+		log_msg("DEBUG", "Final URL:", final_url)
 	except requests.RequestException as e:
-		print(f"Error resolving or parsing URL: {e}")
-		return None, None
+		raise RuntimeError(f"Failed to resolve standard URL: {e}")
+	coords = extract_coords_from_url(final_url)
+	return coords, final_url
+
+# ---- Utility: redirect resolver
+def resolve_initial_redirect(url: str):
+	try:
+		response = requests.get(url, allow_redirects=True, timeout=10)
+		return response.url
+	except Exception as e:
+		log_msg("ERROR", "Redirect failed: ", e)
+		return url
+
+# ---- Utility: use playwright to get the final rendered URL
+def extract_with_playwright(url:str):
+	with sync_playwright() as p:
+		browser = p.chromium.launch(headless=True)
+		page = browser.new_page()
+		page.goto(url)
+		# Click reject button if necessary
+		try:
+			page.locator('button:has-text("Reject all")').first.click(timeout=5000)
+		except:
+			pass # No reject button
+		page.wait_for_function(
+				"""() => window.location.href.includes('/@')""",
+				timeout=15000
+		)
+		final_url = page.url
+		log_msg("DEBUG", "Final URL: ", final_url)
+		browser.close()
+		return final_url
+
+# ---- Utility: extract coordinates with regex patterns
+def extract_coords_from_url(url: str):
+	patterns = [
+		r'/@([-.\d]+),([-.\d]+)',				 # Matches /@lat,lon
+		r'/place/([-.\d]+),([-.\d]+)',			 # Matches /place/lat,lon
+		r'/search/([-.\d]+),\+?([-.\d]+)',
+		r'[?&]q=([-.\d]+),([-.\d]+)',			 # Matches ?q=lat,lon
+		r'[?&]ll=([-.\d]+),([-.\d]+)',			 # Matches ?ll=lat,lon
+		r'[?&]center=([-.\d]+),([-.\d]+)',		 # Matches ?center=lat,lon
+		r'!3d([-.\d]+)!4d([-.\d]+)'				 # Matches !3dlat!4dlon
+	]
+	for pattern in patterns:
+		match = re.search(pattern, url)
+		if match:
+			return match.groups()
+	return None
+
+# ---- Utility: logging function to output and write to file
+def log_msg(level: str, msg: str, optional_arg = None):
+	ts = datetime.now()
+	iso_ts = ts.isoformat()
+	if level == "DEBUG" and debug_enabled == False:
+		return
+	if optional_arg:
+		log_line = f"[{iso_ts}]:[{level}]: {msg} {optional_arg}"
+	else:
+		log_line = f"[{iso_ts}]:[{level}]: {msg}"
+	print(log_line)
+	with open(log_file_path+"gmaps2osm_logs.txt", "a") as log_file:
+		log_file.write(log_line+"\n")
 
 @app.route("/", methods=["GET", "POST"])
 def index():
 	result = {}
 	if request.method == "POST":
 		url = request.form.get("gmaps_url", "").strip()
-		print(f"[DEBUG] URL: {url}")
+		log_msg("DEBUG", "URL:", url)
 		if not url:
 			result["error"] = "Please enter a Google Maps URL."
-			print(f"[DEBUG] Not a URL")
+			log_msg("DEBUG", "Not a URL")
 		else:
 			try:
 				if not GMAPS_URL_RE.search(url):
 					result["error"] = "Please enter a valid Google Maps URL."
 				else:
 					coords, final_url = extract_coordinates(url)
-					print(f"[DEBUG] coords: {coords}")
+					log_msg("DEBUG", "coords:", coords)
 					if coords:
 						lat, lon = coords
 						result["latitude"] = lat
