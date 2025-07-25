@@ -10,14 +10,15 @@ from playwright.sync_api import sync_playwright
 # https://www.google.com/maps/place/Eiffel+Tower/@48.8584,2.2945,17z
 # https://google.com/maps/place/Statue+of+Liberty/@40.6892,-74.0445,17z
 # https://maps.google.com/maps?q=Big+Ben,+London # has an issue, doesnt work
-# https://goo.gl/maps/XkC3bN3EoVhM8P4j7 # has an issue, doesnt work
 # https://maps.app.goo.gl/4jnZLELvmpvBmFvx8
 # https://maps.app.goo.gl/jXqDkM2NWN55kZcd9?g_st=com.google.maps.preview.copy
 # https://www.google.co.uk/maps/place/Buckingham+Palace/@51.5014,-0.1419,17z
 # https://www.google.de/maps/place/Brandenburger+Tor/@52.5163,13.3777,17z
 
-debug_enabled = True
-log_file_path = "/home/mart/Projects/gmaps2osm/"
+debug_enabled = False
+is_headless = not debug_enabled
+print(f"is_headless: {is_headless}")
+log_file_path = ""
 app = Flask(__name__)
 
 GMAPS_URL_RE = re.compile(
@@ -39,12 +40,30 @@ GMAPS_URL_RE = re.compile(
 def extract_coordinates(url: str):
 	if ".preview.copy" in url:
 		return handle_preview_copy_url(url)
+	if "maps?q=" in url:
+		return handle_browser_resolved_url(url)
 	else:
 		return handle_standard_url(url)
 
 # ---- Handler: preview.copy links
 def handle_preview_copy_url(url: str):
 	url = url.split('?')[0]
+	input_url = resolve_initial_redirect(url)
+	if "consent.google.com" in input_url:
+		parsed = urllib.parse.urlparse(input_url)
+		query = urllib.parse.parse_qs(parsed.query)
+		continue_url = query.get("continue", [""])[0]
+		if continue_url:
+			input_url = urllib.parse.unquote(continue_url)
+		else:
+			log_msg("ERROR", "No 'continue' parameter found.")
+			return None, input_url
+	final_url = extract_with_playwright(input_url)
+	coord = extract_coords_from_url(final_url)
+	return coord, final_url
+
+# ---- Handler: links with only a query containing place names (https://maps.google.com/maps?q=Big+Ben,+London)
+def handle_browser_resolved_url(url: str):
 	input_url = resolve_initial_redirect(url)
 	if "consent.google.com" in input_url:
 		parsed = urllib.parse.urlparse(input_url)
@@ -83,7 +102,7 @@ def resolve_initial_redirect(url: str):
 # ---- Utility: use playwright to get the final rendered URL
 def extract_with_playwright(url:str):
 	with sync_playwright() as p:
-		browser = p.chromium.launch(headless=True)
+		browser = p.chromium.launch(headless=is_headless)
 		page = browser.new_page()
 		page.goto(url)
 		# Click reject button if necessary
