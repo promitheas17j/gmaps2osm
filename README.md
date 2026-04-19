@@ -1,3 +1,6 @@
+> [!WARNING]
+> This repository has been migrated to https://codeberg.org/promitheas/gmaps2osm
+
 # gmaps2osm
 
 Link to the live website: www.gmaps2osm.de
